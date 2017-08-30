@@ -1,0 +1,56 @@
+* Assignment 1 - Alex Nguyen
+* Todo
+** Report req's
+Please ensure that you use the specified ﬁle names. You may of course have additional header ﬁles and/or helper ﬁles. If you are using C, then you MUST submit a makeﬁle/script along with your code (not necessary with Java or Python). This is because we need to know how to resolve the dependencies among all the files that you have provided. After running your makefile we should have the following executable files: sender and receiver. In addition you should submit a small report, report.pdf (no more than 5 pages)
+
+- describing the program design,
+-  a brief description of how your system works and your message design.
+- Also discuss any design tradeoffs considered and made.
+- Describe possible improvements and extensions to your program and indicate how you could realise them.
+- If your program does not work under any particular circumstances please report this here.
+- Also indicate any segments of code that you have borrowed from the Web or other books.
+*** Official section
+As mentioned earlier, you should submit a small report, report.pdf (no more than 5 pages), plus appendix section (appendix need not be counted in the 5 page limit). Your report must contain the following:
+1. A brief discussion of how you have implemented the STP protocol. Provide a list of features that you have successfully implemented. In case you have not been able to get certain features of STP working, you should also mention that in your report.
+2. A detailed diagram of your STP header and a quick explanation of all fields (similar to the diagrams that we have used in the lectures to understand TCP/UDP headers).
+3. For the standard version of the assignment, answer the following questions: (a) Use the following parameter setting: pdrop = 0.1, MWS = 500 bytes, MSS = 50 bytes, seed = 300.
+-Explain how you determine a suitable value for timeout. Note that you may need to experiment with different timeout values to answer this question.
+- Justify your answer.With the timeout value that you have selected,
+- run an experiment with your STP programs transferring the file test1.txt (available on the assignment webpage).
+- Show the sequence of STP packets that are observed at the receiver. It is sufficient to just indicate the sequence numbers of the STP packets that have arrived. You do not have to indicate the payload contained in the STP packets (i.e. the text).
+- Run an additional experiment with pdrop = 0.3, transferring the same file (test1.txt).
+- In your report, discuss the resulting packet sequences of both experiments indicating where dropping occurred.
+- Also, in the appendix section show the packet sequences of all the experiments.
+(b) Let Tcurrent represent the timeout value that you have chosen in part (a).
+Set pdrop = 0.1, MWS = 500 bytes, MSS = 50 bytes, seed = 300 and run three experiments with the following different timeout values: i. Tcurrent
+ii. 4 × Tcurrent
+iii. Tcurrent/4 and transfer the file test2.txt (available on the assignment webpage) using STP.
+- Show a table that indicates how many STP packets were transmitted (this should include retransmissions) in total and how long the overall transfer took.
+- Discuss the results.
+** How to start:
+Tips on getting started: The best way to tackle a complex implementation task is to do it in stages.
+- A good starting point is to implement the file transfer using the simpler alternating-bit (stop-and-wait) protocol (version rdt3.0 from the textbook).
+- First, make sure that your program works without implementing the PLD module.
+- Next, implement the packet drop functionality of the PLD and test your protocol.
+- Once you can verify that this works, extend your code to handle transmission of a window of packets (i.e., MWS).
+- Send a window of packets and wait for all acknowledgements to come back before sending another window worth of data. As before, test the no loss case first.
+- Then, extend your program to handle packet losses
+- Once you have the complete STP protocol implemented run comprehensive tests to ensure that your program works correctly.
+
+You are required to implement the following features in the Sender and Receiver:
+1. A three-way handshake (SYN, SYN+ACK, ACK) for the connection establishment. The ACK sent by the sender to conclude the three-way handshake should not contain any payload (i.e. data). See Section 3.5.6 for further details.
+2. The four-segment connection termination (FIN, ACK, FIN, ACK). The Sender will initiate the connection close once the entire file has been successfully transmitted. See Section 3.5.6 for further details.
+3. Sender must maintain a single-timer for timeout operation (Section 3.5.4 of the text).
+4. Sender should implement all the features mentioned in Section 3.5.4 of the text, with the exception of doubling the timeout. The STP protocol must include the simplified TCP sender (Figure 3.33 of the text) and fast retransmit (pages 247-248). You will need to use a number of concepts that we have discussed in class, e.g., sequence numbers, cumulative acknowledgements, timers, buffers, etc. for implementing your protocol.
+5. Receiver should implement the features mentioned in Section 3.5.4 of the text. However, you do not need to follow Table 3.2 for ACK generation. All packets should be immediately acknowledged, i.e. you do not have to implement delayed ACKs.
+6. STP is a byte-stream oriented protocol. You will need to include sequence number and acknowledgement number fields in the STP header for each segment. The meaning of sequence number and acknowledgment number are the same as TCP.
+7. MSS (Maximum segment size) is the maximum number of bytes of data that your STP segment can contain. In other words, MSS counts data ONLY and does NOT include header. Sender must be able to deal with different values of MSS. The value of MSS will be supplied to Sender as an input argument.
+8. Another input argument for Sender is Maximum Window Size (MWS). MWS is the maximum number of un-acknowledged bytes that the Sender can have at any time. MWS counts ONLY data. Header length should NOT be counted as part of MWS.
+Remarks: Note that TCP does not explicitly define a maximum window size. In TCP, the maximum number of un-acknowledged bytes is limited by the smaller of receive window and the congestion control window. Since you will not be implementing flow or congestion control, you will be limiting the number of un-acknowledged bytes by using the MWS parameter. In other words, you will need to ensure that during the lifetime of the connection, the following condition is satisfied:
+ LastByteSent – LastByteAcked ≤ MWS
+9.
+Even though you will use UDP since the sender and receiver will mostly be running on machines that are within close proximity of each other (e.g.: on the same Ethernet LAN or even on the same physical machine), there will be no real possibility of datagrams being dropped. In order to test the reliability of your protocol, it is imperative to introduce artificially induced packet loss and delays. For this purpose you must also implement a Packet Loss and Delay (PLD) Module as part of the Sender program. The details for this module are explained later in the specification. Remarks: For the standard version of the assignment, the PLD module will only need to drop packets while for extended version, the PLD module will need to drop and delay packets. For simplicity, call both of them the PLD module, even though the PLD module for the standard version does not delay packets. 10. You must use a constant timeout in your program. The value of the timeout will be supplied to Sender as an input argument. Note that, this requirement applies to the standard version of the assignment. The extended version has a different requirement.
+10. You must use a constant timeout in your program. The value of the timeout will be supplied to Sender as an input argument. Note that, this requirement applies to the standard version of the assignment. The extended version has a different requirement.
+
+NOTE:
+The data portion must not contain more than MSS bytes of data. You must use the same STP segment format for data transfer as well as for the acknowledgements flowing back from the receiver to the sender. The only difference will be that the acknowledgement segments will not contain any data. All information that is necessary for the proper functioning of your protocol must be provided in the STP headers. You should not use any information from the header of the UDP datagram that will encapsulate the STP packets (except for port number and IP address).
