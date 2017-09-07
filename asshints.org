@@ -1,0 +1,34 @@
+Sender -> seq = 10 -> Receiver ? match rec seq-num ? good (keep packet) : otherwise, discard packet (or buffer) -> send back ack with ack number 10 (seq is number of thing it's expecting)
+if good, Receiver sends Sender an ack indicating next packet with number 10 + len(data)
+sender also needs sequence number
+Sender
+1: sq 1 get ack 11 -> send which packet to repeat ( if needed)
+2: seq 11
+3: seq 21
+
+store? use a dict
+dict = {}
+dict[seq_number] = stp_packet
+use pickle -> serialize
+#send
+import pickle
+stp_packet = STPPacket(data, ...)
+socket.sendto(pickle.dumps(stp_packet). (client_ip, client_port)
+
+#receive
+import pickle
+data, addr = socket.recvfrom(4096)
+stp_packet = pickle.loads(data)
+
+#after receive..
+received_seq_number = stp_packet.seq_num
+
+#timer expiry
+#on send
+make a timer, start()
+
+#fail
+stp_retransmit
+
+#receive:
+self.timer.cancel()
