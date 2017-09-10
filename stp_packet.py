@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-import stp_packet_header as STPHeader
+from pprint import pprint
+import re
 
 
 class STPPacket:
@@ -17,3 +18,14 @@ class STPPacket:
         self.ack = ack
         self.syn = syn
         self.fin = fin
+
+    def print_properties(self):
+        for packet_attr in dir(self):
+            if re.match('^__.*__$', packet_attr):
+                continue
+            else:
+                prop = getattr(self, packet_attr)
+                if not callable(prop):  # exclude methods
+                    pprint("{}: {}".format(packet_attr, prop))
+                    if packet_attr == "data":
+                        pprint("type of data: {}".format(type(prop)))
