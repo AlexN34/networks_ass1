@@ -32,34 +32,28 @@ class Sender:
     # packet received:
     # self.timer.cancel()
 
-    # use the same socket for send packets/receiver ack - acks bypass pld
-    # output to Seder_log.txt for each segmet sent ad received
-    # log format: <snd/rcv/drop> <time> <type of packet> <seq-number> <number-of- bytes> <ack-number>
-    # where <type of packet> could be S (SYN), A (ACK), F (FIN) and D (Data)
-    # Once the entire file has been transmitted reliably the Sender should initiate the connection closure process by sending a FIN segment
-    # The Sender should also print the following statistics at the end of the log file (i.e. Sender_log.txt):
-    # • Amount of (original) Data Transferred (in bytes)
-    # • Number of Data Segments Sent (excluding retransmissions)
-    # • Number of (all) Packets Dropped (by the PLD module)
-    # • Number of (all) Packets Delayed (for the extended assignment only)
-    # • Number of Retransmitted Segments
-    # • Number of Duplicate Acknowledgements received
+    def __init__(self, receiver_host_ip, receiver_port, timeout_length):
+        self.receiver_host_ip, self.receiver_port = receiver_host_ip, receiver_port
+        self.packet_buffer = {}
 
-    connection_socket = socket.create_connection(socket.SOCK_DGRAM)
-    client_ip = 'localhost'
-    client_port = 5000
-    self.packet_buffer = {}
     # specify timeout_length. if this fails then it calls stp.retransmit(seq_num)
-    sender_timer = Timer(timeout_length, self.stp_retransmit, args=[seq_num])
+    # TODO figure out timeout; get from packet buffer?
+    # self.sender_timer = Timer(timeout_length, self.stp_retransmit, args=[seq_num])
 
     def set_timer(self):
         print("dummy")
 
     def open_connection(self):
         print("dummy")
+        try:
+            self.connection_socket = socket.socket(socket.AF_INET,
+                                                   socket.SOCK_DGRAM)
+        except socket.error:
+            print("Failed to create socket")
+            sys.exit()
 
     def close_connection(self):
-        print("dummy")
+        self.connection_socket.close()
 
     def send_packet(self, stp_packet):
         #stp_packet = STPPacket(data, ..)
@@ -82,6 +76,8 @@ if __name__ == "__main__":
     # MWS: max window size in bytes
     # MSS: max segmet size (max data in bytes carried in each STP_packet)
     # pdrop: probability to drop 0-1, seed: seed for rgeerator
+    # use the same socket for send packets/receiver ack - acks bypass pld
+    # v1 - alternating bit using seq 0-1 only
     print("Setup sender")
     if len(sys.argv) < n_expected_args:
         print(
@@ -91,3 +87,8 @@ if __name__ == "__main__":
 
         receiver_host_ip, receiver_port, file_name, MWS, MSS, timeout, pdrop, seed = sys.argv[
             1:]
+        sender = Sender()
+        data = ""
+        sender.open_connection()
+        stp_packet = stp_packet.STPPacket(data, 0, 0, syn=True)
+        socket.socket()
