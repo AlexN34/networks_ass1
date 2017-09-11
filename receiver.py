@@ -17,7 +17,7 @@ class Receiver:
     # out-of-order packets
     # receiver receives stp_packet ad the writes the data inside the packet
     # connection_socket = socket.create_connection(socket.SOCK_DGRAM)
-    buffer_size = 4096
+    # TODO send ack's
 
     def __init__(self, receiver_port, file_path):
         # TODO make file to write into when appropriate
@@ -25,6 +25,7 @@ class Receiver:
         # TODO check hostname - local?
         self.connection_socket = self.open_connection("", receiver_port)
         self.received_bytes = b''
+        self.buffer_size = 4096
         self.log_name = "Receiver_log.txt"
         open(self.log_name, 'w').close()  # clear old log
         self.run_stats = {
@@ -49,10 +50,19 @@ class Receiver:
     def receive_packet(self):
         data, addr = self.connection_socket.recvfrom(self.buffer_size)
         stp_packet = pickle.loads(data)  # data is property of stp_packet
+        self.sender_address = addr
         print("Received packet. addr: {}".format(addr))
         stp_packet.print_properties()
         self.update_log('rcv', 'D', stp_packet)
         return stp_packet
+
+    def send_ack(self, stp_packet):
+        # Data is blank - ack
+        ack_seq_num = stp_packet.seq_num + len(stp_packet.data)
+        ack_packet = STPPacket('', ack_seq_num, stp_packet.seq_num, ack=True)
+        self.connection_socket.sendto(
+            pickle.dumps(ack_packet), self.sender_address)
+        self.update_log('snd', 'A', ack_packet)
 
     # def send_ack(self, ack_packet):
     #     self.connection_socket.sendto(
@@ -106,6 +116,7 @@ if __name__ == "__main__":
             received_packet = receiver.receive_packet()
             if received_packet.data != '~':
                 receiver.received_bytes += received_packet.data
+                receiver.send_ack(received_packet)
             else:
                 receiver.write_file(file_name)
                 receiver.close_connection()
