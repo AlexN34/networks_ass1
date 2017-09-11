@@ -215,3 +215,11 @@ if __name__ == "__main__":
         print("All packets sent - no more packet sending, close connection")
         sender.send_packet(STPPacket('~', 0, 0))
         sender.close_connection()
+
+        # TODO questions:
+        # 1. structure 2. pick seq # starting, pick ack from sender?
+        # does connection die after JUST transfer the file? when to close?
+        # MSS / MWS determine how big chunks to break file into?
+        # ^ calculate size of total packet, then just put data in to fill?
+        # sender should send acks to say it's received
+        # pick random for start
