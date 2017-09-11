@@ -17,7 +17,7 @@ class Receiver:
     # out-of-order packets
     # receiver receives stp_packet ad the writes the data inside the packet
     # connection_socket = socket.create_connection(socket.SOCK_DGRAM)
-    # TODO send ack's
+    # TODO on receive, check buffer, find max in order - send ack for highest possible
 
     def __init__(self, receiver_port, file_path):
         # TODO make file to write into when appropriate
@@ -42,32 +42,55 @@ class Receiver:
             'Number of Duplicate Segments received: {}\n'
         }
         self.start_time = time.time()
+        self.packet_buffer = {}
+        # set up in syn/synack/ack?
+        self.next_seq_num = None
 
     def write_file(self, file_path):
         with open(file_path, 'wb') as handle:
             handle.write(self.received_bytes)
 
     def receive_packet(self):
+        """
+        return value indicating whether packet modified
+        """
         data, addr = self.connection_socket.recvfrom(self.buffer_size)
         stp_packet = pickle.loads(data)  # data is property of stp_packet
         self.sender_address = addr
         print("Received packet. addr: {}".format(addr))
         stp_packet.print_properties()
         self.update_log('rcv', 'D', stp_packet)
-        return stp_packet
+        # TODO won't need this when synack is complete
+        if not self.next_seq_num:
+            self.next_seq_num = stp_packet.seq_num
+        # buffer if new - could be out of order, though
+        if stp_packet.seq_num not in self.packet_buffer.keys():
+            self.packet_buffer[stp_packet.seq_num] = stp_packet
+        else:
+            self.run_stats["duplicates_received"] += 1
 
-    def send_ack(self, stp_packet):
+        # check if out of order - if in order, update expected seq
+        if stp_packet.seq_num == self.next_seq_num:
+            receiver.received_bytes += stp_packet.data
+            # move window up; everything past this has been acknowledged
+            del (self.packet_buffer[self.next_seq_num])
+            self.next_seq_num = stp_packet.seq_num + len(stp_packet.data)
+            # import ipdb
+            # ipdb.set_trace()
+            self.send_ack(stp_packet.ack_num, self.next_seq_num)
+        if stp_packet.data != '~':
+            return True
+        return False
+
+    def send_ack(self, seq_num, ack_num):
         # Data is blank - ack
-        ack_seq_num = stp_packet.seq_num + len(stp_packet.data)
-        ack_packet = STPPacket('', ack_seq_num, stp_packet.seq_num, ack=True)
+        # seq num is next byte needed
+        # we leave the receiver's sequence number as is as it is not transmitting
+        # any data at the moment
+        ack_packet = STPPacket('', seq_num, ack_num, ack=True)
         self.connection_socket.sendto(
             pickle.dumps(ack_packet), self.sender_address)
         self.update_log('snd', 'A', ack_packet)
-
-    # def send_ack(self, ack_packet):
-    #     self.connection_socket.sendto(
-    #         pickle.dumps(ack_packet), (self.sender_host_ip, self.sender_port))
-    #     # TODO get sender ip/port for acknowledgement and set somewhere
 
     def open_connection(self, host, receiver_port):
         print("dummy")
@@ -113,11 +136,11 @@ if __name__ == "__main__":
         receiver = Receiver(int(receiver_port), file_name)
         print("Receiver setup, waiting on port: {}".format(receiver_port))
         while True:
-            received_packet = receiver.receive_packet()
-            if received_packet.data != '~':
-                receiver.received_bytes += received_packet.data
-                receiver.send_ack(received_packet)
+            if receiver.receive_packet():
+                # if not in order, this will be the last ordered ack
+                print("received data")
             else:
+                # receiver.send_ack(receiver.next_seq_num)
                 receiver.write_file(file_name)
                 receiver.close_connection()
                 receiver.close_log()
