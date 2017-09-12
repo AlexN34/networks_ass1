@@ -1,24 +1,13 @@
+#!/usr/bin/python3
 from stp_packet import STPPacket
 import pickle
 import socket
 import sys
 import time
+from random import randint, seed
 
 
 class Receiver:
-    # Receiver ? match rec seq-num ? good (keep packet) : otherwise, discard
-    # packet (or buffer) -> send back ack with ack number 10 (seq is number of
-    # thing it's expecting)
-    # if received a good packet, Receiver sends Sender an ack indicating next
-    # packet with number 10 + len(data)
-    #
-    # you need to create this
-    # receiver needs to have a sequence number so it can deal with
-    # out-of-order packets
-    # receiver receives stp_packet ad the writes the data inside the packet
-    # connection_socket = socket.create_connection(socket.SOCK_DGRAM)
-    # TODO on receive, check buffer, find max in order - send ack for highest possible
-
     def __init__(self, receiver_port, file_path):
         # TODO make file to write into when appropriate
         self.file_name = file_name
@@ -44,7 +33,10 @@ class Receiver:
         self.start_time = time.time()
         self.packet_buffer = {}
         # set up in syn/synack/ack?
-        self.next_seq_num = None
+        self.next_seq_num = None  # sender next expected seq num; used as ack_num
+        self.receiver_seq_num = None  #
+        self.init_seq_num = randint(
+            0, 1000)  # pick random starting sequence number
 
     def write_file(self, file_path):
         with open(file_path, 'wb') as handle:
@@ -59,7 +51,7 @@ class Receiver:
         self.sender_address = addr
         print("Received packet. addr: {}".format(addr))
         stp_packet.print_properties()
-        self.update_log('rcv', 'D', stp_packet)
+        self.update_log('rcv', self.get_packet_type(stp_packet), stp_packet)
         # TODO won't need this when synack is complete
         if not self.next_seq_num:
             self.next_seq_num = stp_packet.seq_num
@@ -71,14 +63,67 @@ class Receiver:
 
         # check if out of order - if in order, update expected seq
         if stp_packet.seq_num == self.next_seq_num:
-            receiver.received_bytes += stp_packet.data
             # move window up; everything past this has been acknowledged
             del (self.packet_buffer[self.next_seq_num])
             self.next_seq_num = stp_packet.seq_num + len(stp_packet.data)
-            # import ipdb
-            # ipdb.set_trace()
-            self.send_ack(stp_packet.ack_num, self.next_seq_num)
-        if stp_packet.data != '~':
+            packet_type = self.get_packet_type(stp_packet)
+            if packet_type == 'D':
+                receiver.received_bytes += stp_packet.data
+                self.receiver_seq_num = stp_packet.ack_num
+                self.send_ack(self.receiver_seq_num, self.next_seq_num)
+            elif packet_type == 'F':
+                self.close_stp()
+
+    def receive_syn(self):
+        data, addr = self.connection_socket.recvfrom(self.buffer_size)
+        stp_packet = pickle.loads(data)  # data is property of stp_packet
+        self.sender_address = addr
+        print("Received packet. addr: {}".format(addr))
+
+        packet_type = self.get_packet_type(stp_packet)
+        self.update_log('rcv', packet_type, stp_packet)
+        if packet_type == 'S':
+            self.next_seq_num = stp_packet.seq_num  # used in ack_num
+            self.receiver_seq_num = self.init_seq_num  # used in pckt seq_num
+            return True
+        return False
+
+    def send_synack(self):
+        synack_packet = STPPacket(
+            '',
+            self.receiver_seq_num,
+            self.next_seq_num + 1,
+            syn=True,
+            ack=True)
+        self.connection_socket.sendto(
+            pickle.dumps(synack_packet), self.sender_address)
+        self.update_log('snd',
+                        self.get_packet_type(synack_packet), synack_packet)
+
+    def send_fin_ack(self):
+        fin_packet = STPPacket(
+            '', self.receiver_seq_num, self.next_seq_num, ack=True, fin=True)
+        self.connection_socket.sendto(
+            pickle.dumps(fin_packet), self.sender_address)
+        self.update_log('snd', self.get_packet_type(fin_packet), fin_packet)
+
+    def receive_sender_ack(self):
+        data, addr = self.connection_socket.recvfrom(self.buffer_size)
+        stp_packet = pickle.loads(data)  # data is property of stp_packet
+        self.sender_address = addr
+        print("Received packet. addr: {}".format(addr))
+        stp_packet.print_properties()
+        self.update_log('rcv', self.get_packet_type(stp_packet), stp_packet)
+
+        packet_type = self.get_packet_type(stp_packet)
+        if packet_type == 'A':
+            if stp_packet.ack_num == self.init_seq_num + 1 \
+                and stp_packet.seq_num == self.next_seq_num + 1:
+                # SYN acknolwedgement
+                self.next_seq_num = stp_packet.seq_num
+            # else:
+            # FIN acknowledgement
+            #     self.close_connection()
             return True
         return False
 
@@ -90,7 +135,7 @@ class Receiver:
         ack_packet = STPPacket('', seq_num, ack_num, ack=True)
         self.connection_socket.sendto(
             pickle.dumps(ack_packet), self.sender_address)
-        self.update_log('snd', 'A', ack_packet)
+        self.update_log('snd', self.get_packet_type(ack_packet), ack_packet)
 
     def open_connection(self, host, receiver_port):
         print("dummy")
@@ -104,6 +149,8 @@ class Receiver:
             sys.exit()
 
     def close_connection(self):
+        self.write_file(file_name)
+        self.close_log()
         self.connection_socket.close()
 
     def update_log(self, packet_action, packet_type, stp_packet):
@@ -123,6 +170,43 @@ class Receiver:
                 handle.write(self.run_stats_msgs[key]
                              .format(self.run_stats[key]))
 
+    def get_packet_type(self, stp_packet):
+        if len(stp_packet.data) > 0:
+            return 'D'
+        else:
+            result = ''
+            if stp_packet.fin:
+                result += 'F'
+            elif stp_packet.syn:
+                result += 'S'
+            if stp_packet.ack:
+                result += 'A'
+            return result
+
+    def initiate_stp(self):
+        # LISTEN state
+        while not self.receive_syn():
+            pass
+        # SYN_RCVD state
+        self.send_synack()
+        while not self.receive_sender_ack():
+            # resend synack if we keep getting other packets
+            self.send_synack()
+        # ESTABLISHED
+        self.stp_flag = True
+
+    def close_stp(self):
+        """
+        called when we detect sender wants to close - start in CLOSE_WAIT state
+        """
+        # CLOSE_WAIT
+        self.send_fin_ack()
+        # LAST_ACK
+        while not self.receive_sender_ack():
+            self.send_fin()
+        self.close_connection()
+        self.stp_flag = False
+
 
 n_expected_args = 3
 if __name__ == "__main__":
@@ -131,17 +215,11 @@ if __name__ == "__main__":
     if len(sys.argv) < n_expected_args:
         print("Usage: python receiver.py receiver_port file.txt")
     else:
-
+        seed(1)  # seed used in random int
         receiver_port, file_name = sys.argv[1:]
         receiver = Receiver(int(receiver_port), file_name)
         print("Receiver setup, waiting on port: {}".format(receiver_port))
-        while True:
-            if receiver.receive_packet():
-                # if not in order, this will be the last ordered ack
-                print("received data")
-            else:
-                # receiver.send_ack(receiver.next_seq_num)
-                receiver.write_file(file_name)
-                receiver.close_connection()
-                receiver.close_log()
-                break
+        # waits for sender to intiate stp
+        receiver.initiate_stp()
+        while receiver.stp_flag:
+            receiver.receive_packet()
