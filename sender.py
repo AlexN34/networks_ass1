@@ -10,22 +10,12 @@ from threading import Timer
 import random as r
 
 timer_flag = True
-verbose_flag = True
+# verbose_flag = True
+
+verbose_flag = False
 
 
 class Sender:
-    # timer expiry
-    # on send
-    # make a timer, start()
-
-    # packet failed to be received
-    # stp_retransmit
-
-    # packet received:
-    # self.timer.cancel()
-    # TODO schedule send packet phase -> receive ack phase -> etc state machine
-    # TODO window size - method to look inside packet_buffer and see active bytes
-
     def __init__(self, receiver_host_ip, receiver_port, mws, mss,
                  timeout_length, pdrop, seed_value):
         self.receiver_host_ip = receiver_host_ip
@@ -56,7 +46,6 @@ class Sender:
             "duplicates_ack":
             'Number of Duplicate Acknowledgements received {}\n'
         }
-        self.start_time = time.time()  # TODO funny time values calc'd.. check
         self.receiver_seq_num = 0  # Set by synack packet
         self.mss = mss
         self.mws = mws
@@ -69,6 +58,7 @@ class Sender:
         self.syn_flag = False
         self.fin_flag = False
         self.send_flag = False
+        self.start_time = time.time()  # count time from connection start
 
     # specify timeout_length. if this fails then calls stp.retransmit(seq_num)
     # TODO figure out timeout; get from packet buffer?
@@ -317,10 +307,9 @@ class Sender:
             self.run_stats["packets_dropped"] += 1
         time_since_excution = (time.time() - self.start_time) * 1000  # ms
         with open(self.log_name, 'a') as handle:
-            handle.write('{} {} {} {} {} {} {}\n'.format(
+            handle.write('{} {} {} {} {} {}\n'.format(
                 packet_action, time_since_excution, packet_type,
-                stp_packet.seq_num,
-                len(stp_packet.data), stp_packet.ack_num, is_retransmit))
+                stp_packet.seq_num, len(stp_packet.data), stp_packet.ack_num))
 
     def close_log(self):
         if verbose_flag:
@@ -368,10 +357,11 @@ class Sender:
 
     def initiate_stp(self):
         self.syn_flag = True  # toggle ignore pld
-        init_packet = STPPacket(b'', self.init_seq_num, None, syn=True)
+        # copy example log of 0 beginning ack
+        init_packet = STPPacket(b'', self.init_seq_num, 0, syn=True)
         # send SYN packet; timer will handle retransmits
-        self.send_packet(init_packet)
         self.next_seq_num += 1  # increment next packet number even though 0 data sent
+        self.send_packet(init_packet)
         # SYN_SENT beyond this point
         while not self.receive_synack():  # wait for SYNACK packet
             pass

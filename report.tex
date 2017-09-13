@@ -1,30 +1,77 @@
-* Assignment 1 - Alex Nguyen z3379933 17s2
-** Protocol implementation details
-   - This implementation is in Python3 (3.6.2) and consists of 4 modules; sender.py, receiver.py, stp_packet.py and pld_module.py
-   - stp_packet.py contains the implementation for the segement (header and payload) and features are discussed in the next section. It contains a print_complete() method which prints properties (used in debugging)
-   - pld_module.py contains the packet loss methods that chooses with a Boolean whether a packet should be dropped (should_transmit_packet())
-   - sender.py contains a Sender class which implements a blocking singlethreaded event loop that rotates between sending a packet (whilst there are bytes left to send), receiving acks from Receiver in receiver.py. Receiver sits in continual receive_packet blocking loop and responds accordingly.
-   - 3-way STP initiation handshake and 4-way close handshake are implemented in initiate_stp() and close_stp() in both Sender and Receiver, which block to progress state until established/closed, after which corresponding flags are toggled. The Fin and Ack Receiver to Sender has been combined into a single 'FA' as per assignment spec example.
-   - Single timeout component is implemented by interrupts by a threaded sender.sender_timer(), which calls sender.retransmit() with the sender.send_base as an argument to retransmit the right packet when appropriate. Set_timer() and set_close_timer() are methods to modify the timer state.
-   - After initiation, Sender's send_packet(), receive_packet() and retransmit_packet() methods handle the main logic, using the combination of a packet_buffer (to store/track sent packets), next_seq_num and send_base variables according to simpleified TCP sender with fast retransmit
-   - Instant acks, no delayed ack and packets respect MWS/MSS respectively - current window size will never exceed the maximum and where possible it will partition into MSS packets
-   - For straightforward use of the python socket/pickle libraries, this TCP sender is single-threaded - the event loop follows an order and blocks, though only 1 packet is processed before moving on. To improve, multithreading would  asynchronous event loop would allow for the event loop to match the textbook.
-   - Program seems vulnerable to infinite retransmission when the timeout_length is too low (<3ms) - side-effect of single-threadedness
-** STP Header explanation
-   - A detailed diagram of your STP header and a quick explanation of all fields (similar to the diagrams that we have used in the lectures to understand TCP/UDP headers).
-   [[./stp_header.JPG]]
-    See figure above for a diagram of the STPPacket (stp_packet.py) used for this assignment.
-   - Sequence Number (seq_num): Sequence number (initially < 1000 for Sender and Receiver) assigned to the packet. This is used for signifying/identifying the first byte of data that the packet contains, and both Sender and Receiver use this number to track the packet they're up to sending and acknowledging, respectively.
-   - Acknowledgement Number (ack_num): This number identifies the last byte accepted by the other party. In ack packets created by Receiver passed to Sender, the ack_num is a tracking number that increments based on the number of bytes last acknowledged by Receiver.
-   - isAck, isSyn, isFin booleans: used to identify Acknowledgement (ack) packets, used in intiating connection (receiver sends response with both Syn and Ack booleans set to True) and closing (receiver sends a packet with Fin and Ack bits set to True to model the 4 way handshake)
-** Experiment results
-*** Part A
-- I decided to use 20ms as the timeout value. I experimented with values of 0.5 ms (40x less) and 100ms (5x more) as shown in attached Sender/Receiver_log_Experiments_timeout_fast/slow.txt files (also see appendix).
-  - Longer timeout causes sender to take longer to wait between sending packets and causes deadtime (which can be spent retransmitting to receiver) - In this case, the cost of a timeout is much larger (100ms vs 2ms~) of the average time between send and packet receives (timeout_slow.txt files)
-  - Shorter timeout makes use of the time mentioned above, but brings a risk of being caught in a retransmission loop - if the timeout is *too* short, the sender does not have enough time to receive any packets before a timeout (and hence infinite retransmission) - demonstrated in timeout_fast.txt files.
-  - The trace of Sequence STP packets observed at the receiver ('rcv' packet) at 20ms is shown below with pdrop = 0.1 and 0.3 respectively:
-  - See appendix for full trace
-#+BEGIN_EXAMPLE
+% Created 2017-09-13 Wed 22:59
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\author{alex}
+\date{\today}
+\title{}
+\hypersetup{
+ pdfauthor={alex},
+ pdftitle={},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 25.2.1 (Org mode 9.0.10)}, 
+ pdflang={English}}
+\begin{document}
+
+\tableofcontents
+
+\section{Assignment 1 - Alex Nguyen z3379933 17s2}
+\label{sec:orgce30c36}
+\subsection{Protocol implementation details}
+\label{sec:org19af96c}
+\begin{itemize}
+\item This implementation is in Python3 (3.6.2) and consists of 4 modules; sender.py, receiver.py, stp\(_{\text{packet.py}}\) and pld\(_{\text{module.py}}\)
+\item stp\(_{\text{packet.py}}\) contains the implementation for the segement (header and payload) and features are discussed in the next section. It contains a print\(_{\text{complete}}\)() method which prints properties (used in debugging)
+\item pld\(_{\text{module.py}}\) contains the packet loss methods that chooses with a Boolean whether a packet should be dropped (should\(_{\text{transmit}}\)\(_{\text{packet}}\)())
+\item sender.py contains a Sender class which implements a blocking singlethreaded event loop that rotates between sending a packet (whilst there are bytes left to send), receiving acks from Receiver in receiver.py. Receiver sits in continual receive\(_{\text{packet}}\) blocking loop and responds accordingly.
+\item 3-way STP initiation handshake and 4-way close handshake are implemented in initiate\(_{\text{stp}}\)() and close\(_{\text{stp}}\)() in both Sender and Receiver, which block to progress state until established/closed, after which corresponding flags are toggled. The Fin and Ack Receiver to Sender has been combined into a single 'FA' as per assignment spec example.
+\item Single timeout component is implemented by interrupts by a threaded sender.sender\(_{\text{timer}}\)(), which calls sender.retransmit() with the sender.send\(_{\text{base}}\) as an argument to retransmit the right packet when appropriate. Set\(_{\text{timer}}\)() and set\(_{\text{close}}\)\(_{\text{timer}}\)() are methods to modify the timer state.
+\item After initiation, Sender's send\(_{\text{packet}}\)(), receive\(_{\text{packet}}\)() and retransmit\(_{\text{packet}}\)() methods handle the main logic, using the combination of a packet\(_{\text{buffer}}\) (to store/track sent packets), next\(_{\text{seq}}\)\(_{\text{num}}\) and send\(_{\text{base}}\) variables according to simpleified TCP sender with fast retransmit
+\item Instant acks, no delayed ack and packets respect MWS/MSS respectively - current window size will never exceed the maximum and where possible it will partition into MSS packets
+\item For straightforward use of the python socket/pickle libraries, this TCP sender is single-threaded - the event loop follows an order and blocks, though only 1 packet is processed before moving on. To improve, multithreading would  asynchronous event loop would allow for the event loop to match the textbook.
+\item Program seems vulnerable to infinite retransmission when the timeout\(_{\text{length}}\) is too low (<3ms) - side-effect of single-threadedness
+\end{itemize}
+\subsection{STP Header explanation}
+\label{sec:org1fd274c}
+\begin{itemize}
+\item A detailed diagram of your STP header and a quick explanation of all fields (similar to the diagrams that we have used in the lectures to understand TCP/UDP headers).
+\end{itemize}
+\begin{center}
+\includegraphics[width=.9\linewidth]{./stp_header.JPG}
+\end{center}
+ See figure above for a diagram of the STPPacket (stp\(_{\text{packet.py}}\)) used for this assignment.
+\begin{itemize}
+\item Sequence Number (seq\(_{\text{num}}\)): Sequence number (initially < 1000 for Sender and Receiver) assigned to the packet. This is used for signifying/identifying the first byte of data that the packet contains, and both Sender and Receiver use this number to track the packet they're up to sending and acknowledging, respectively.
+\item Acknowledgement Number (ack\(_{\text{num}}\)): This number identifies the last byte accepted by the other party. In ack packets created by Receiver passed to Sender, the ack\(_{\text{num}}\) is a tracking number that increments based on the number of bytes last acknowledged by Receiver.
+\item isAck, isSyn, isFin booleans: used to identify Acknowledgement (ack) packets, used in intiating connection (receiver sends response with both Syn and Ack booleans set to True) and closing (receiver sends a packet with Fin and Ack bits set to True to model the 4 way handshake)
+\end{itemize}
+\subsection{Experiment results}
+\label{sec:orge7704f0}
+\subsubsection{Part A}
+\label{sec:orgb3b1f38}
+\begin{itemize}
+\item I decided to use 20ms as the timeout value. I experimented with values of 0.5 ms (40x less) and 100ms (5x more) as shown in attached Sender/Receiver\(_{\text{log}}\)\(_{\text{Experiments}}\)\(_{\text{timeout}}\)\(_{\text{fast}}\)/slow.txt files (also see appendix).
+\begin{itemize}
+\item Longer timeout causes sender to take longer to wait between sending packets and causes deadtime (which can be spent retransmitting to receiver) - In this case, the cost of a timeout is much larger (100ms vs 2ms\textasciitilde{}) of the average time between send and packet receives (timeout\(_{\text{slow.txt}}\) files)
+\item Shorter timeout makes use of the time mentioned above, but brings a risk of being caught in a retransmission loop - if the timeout is \textbf{too} short, the sender does not have enough time to receive any packets before a timeout (and hence infinite retransmission) - demonstrated in timeout\(_{\text{fast.txt}}\) files.
+\item The trace of Sequence STP packets observed at the receiver ('rcv' packet) at 20ms is shown below with pdrop = 0.1 and 0.3 respectively:
+\item See appendix for full trace
+\end{itemize}
+\end{itemize}
+\begin{verbatim}
 0.1: 612 613 613 663 713 763 813 863 913 963 1013 1063 1113 1163 1213
 1263 1413 1463 1563 1613 1713 1313 1813 1363 1863 1913 1963 1513
 2013 2113 1663 2163 1763 2063 2206 2206
@@ -32,30 +79,52 @@
 0.3: 612 613 613 663 713 763 913 963 1013 1063 1113 1163 1213 1263 813 863 1363
  1463 1613 1663 1713 1763 1313 1313 1413 1963 1513 2013 1563 2063 2113 2163 1813
  1863 1913 2206 2206
-#+END_EXAMPLE
-****  Packet loss discussion
-     - In the example above, both sequence number traces start with 612/613/613 and end with 2206 2206 twice as these are used in the intiation and teardown of the STP connection
-     - When pdrop is 0.3, packet loss occurs earlier as we can see packet 813 is received much later compared to 0.1 (it is the 7th packet in the latter case, 15th in 0.3). This makes sense as we have increased likelihood of a drop.
-     - Increasing pdrop also seems to increase the gap until the delayed packet is received - with 0.1 1313 appears 4 sequence numbers after it is expected, while at 0.3 1313 disappears for much longer - this is side effect of having to wait for more drops to get the packet through.
-     - This indicates a higher retrasnmission rate for higher pdrop probabilities values, but appendix shows raw numbers the same duplicates -- possibly due to seeding and shorter length of file
-*** Part B
-    The table below summarises the experiment results:
-| Time val  | STP packets (unique+retransmit) | length of transfer |
-| 20ms (t)  |                              56 | 85.5ms             |
-| 80ms (4t) |                              56 | 204ms              |
-| 5ms (t/4) |                              56 | 58.9ms             |
+\end{verbatim}
+\begin{enumerate}
+\item Packet loss discussion
+\label{sec:org7a0ba7f}
+\begin{itemize}
+\item In the example above, both sequence number traces start with 612/613/613 and end with 2206 2206 twice as these are used in the intiation and teardown of the STP connection
+\item When pdrop is 0.3, packet loss occurs earlier as we can see packet 813 is received much later compared to 0.1 (it is the 7th packet in the latter case, 15th in 0.3). This makes sense as we have increased likelihood of a drop.
+\item Increasing pdrop also seems to increase the gap until the delayed packet is received - with 0.1 1313 appears 4 sequence numbers after it is expected, while at 0.3 1313 disappears for much longer - this is side effect of having to wait for more drops to get the packet through.
+\item This indicates a higher retrasnmission rate for higher pdrop probabilities values, but appendix shows raw numbers the same duplicates -- possibly due to seeding and shorter length of file
+\end{itemize}
+\end{enumerate}
+\subsubsection{Part B}
+\label{sec:orgd504658}
+The table below summarises the experiment results:
+\begin{center}
+\begin{tabular}{lrl}
+Time val & STP packets (unique+retransmit) & length of transfer\\
+20ms (t) & 56 & 85.5ms\\
+80ms (4t) & 56 & 204ms\\
+5ms (t/4) & 56 & 58.9ms\\
+\end{tabular}
+\end{center}
 
-**** Timeout length Discussion
-     - Longer timeout resulted in longer overall time to transfer
-     - Comments about length from part A apply here; long timeouts force the current form of sender to block on waiting to receive a packet for longer until timeout which interrupts this - make it longer, and overall it will take longer to transfer
-     - Each run took the same amount of retransmits/unique per run. This could be because we use the same seed/pdrop for each run; fixing the likelihood of dropping a packet (pld.should_transmit_packet()) in the same spot each time.  Also perhaps because this STP sender is not multithreaded - blocking calls are used so a predictable send/receive loop happens each time.
+\begin{enumerate}
+\item Timeout length Discussion
+\label{sec:org6d543f7}
+\begin{itemize}
+\item Longer timeout resulted in longer overall time to transfer
+\item Comments about length from part A apply here; long timeouts force the current form of sender to block on waiting to receive a packet for longer until timeout which interrupts this - make it longer, and overall it will take longer to transfer
+\item Each run took the same amount of retransmits/unique per run. This could be because we use the same seed/pdrop for each run; fixing the likelihood of dropping a packet (pld.should\(_{\text{transmit}}\)\(_{\text{packet}}\)()) in the same spot each time.  Also perhaps because this STP sender is not multithreaded - blocking calls are used so a predictable send/receive loop happens each time.
+\end{itemize}
+\end{enumerate}
 
-* Appendix
-** STP Header
-   [[./pythonbool.png]]
-** Part A
- - pdrop = 0.1
- #+BEGIN_EXAMPLE
+\section{Appendix}
+\label{sec:org41e84b9}
+\subsection{STP Header}
+\label{sec:org67cf3eb}
+\begin{center}
+\includegraphics[width=.9\linewidth]{./pythonbool.png}
+\end{center}
+\subsection{Part A}
+\label{sec:orgcfe1811}
+\begin{itemize}
+\item pdrop = 0.1
+\end{itemize}
+\begin{verbatim}
 rcv 1632.019281387329 S 612 0 0
 snd 1632.3606967926025 SA 137 0 613
 rcv 1632.7528953552246 A 613 0 138
@@ -129,9 +198,11 @@ rcv 1730.008602142334 A 2206 0 138
 Amount of (original) Data Received (in bytes): 1593
 Number of (original) Data Segments received: 32
 Number of Duplicate Segments received: 12
- #+END_EXAMPLE
- - pdrop = 0.3
- #+BEGIN_EXAMPLE
+\end{verbatim}
+\begin{itemize}
+\item pdrop = 0.3
+\end{itemize}
+\begin{verbatim}
 rcv 1611.8731498718262 S 612 0 0
 snd 1612.220048904419 SA 137 0 613
 rcv 1612.5586032867432 A 613 0 138
@@ -207,10 +278,13 @@ rcv 1830.3756713867188 A 2206 0 138
 Amount of (original) Data Received (in bytes): 1593
 Number of (original) Data Segments received: 32
 Number of Duplicate Segments received: 20
- #+END_EXAMPLE
-** Part B
- - T/4
- #+BEGIN_EXAMPLE
+\end{verbatim}
+\subsection{Part B}
+\label{sec:org7b82f44}
+\begin{itemize}
+\item T/4
+\end{itemize}
+\begin{verbatim}
 snd 0.5733966827392578 S 612 0 0
 rcv 0.9748935699462891 SA 137 0 613
 snd 1.2731552124023438 A 613 0 138
@@ -311,9 +385,11 @@ Number of  Data Segments Sent (excluding retransmissions) 40
 Number of (all) Packets Dropped 7
 Number of Retransmitted Segments 16
 Number of Duplicate Acknowledgements received 20
- #+END_EXAMPLE
- - 4T
- #+BEGIN_EXAMPLE
+\end{verbatim}
+\begin{itemize}
+\item 4T
+\end{itemize}
+\begin{verbatim}
  snd 0.5698204040527344 S 612 0 0
 rcv 1.0190010070800781 SA 137 0 613
 snd 1.4905929565429688 A 613 0 138
@@ -415,9 +491,11 @@ Number of (all) Packets Dropped 7
 Number of Retransmitted Segments 16
 Number of Duplicate Acknowledgements received 20
 
- #+END_EXAMPLE
- - T
- #+BEGIN_EXAMPLE
+\end{verbatim}
+\begin{itemize}
+\item T
+\end{itemize}
+\begin{verbatim}
  snd 4.37164306640625 S 612 0 0
 rcv 4.924774169921875 SA 137 0 613
 snd 5.340814590454102 A 613 0 138
@@ -519,4 +597,5 @@ Number of (all) Packets Dropped 7
 Number of Retransmitted Segments 16
 Number of Duplicate Acknowledgements received 20
 
- #+END_EXAMPLE
+\end{verbatim}
+\end{document}
